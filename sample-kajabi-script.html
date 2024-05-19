@@ -1,0 +1,161 @@
+<script async src="https://atlos.io/packages/app/atlos.js"></script>
+
+<script>
+  const merchantId = '<your merchant ID>';
+  const product_one_hook_url = '<product one activation hook URL>';
+  const product_two_hook_url = '<product two activation hook URL>';
+  const thank_you_url = '<thank you page URL>';
+
+  var email, name, oneTime, monthly, addProductOne, addProductTwo;
+  var oneTimeIsPaid = false;
+
+  window.onload = () => {
+    const inputSubmits = document.querySelectorAll('input[type=submit]');
+    
+    if (inputSubmits.length == 0) {
+      console.error('Couldn\'t find input elements.');
+      return;
+    }
+    
+    const inputSubmit = inputSubmits[0];
+    inputSubmit.value = "Pay with Credit Card";
+    
+    const div = document.createElement('div');
+    div.innerHTML = `<button id="pay_with_crypto" class="btn btn-primary btn-block checkout-panel-btn" onclick="return payWithCrypto();">Pay with Crypto</button>`;
+
+    inputSubmit.before(div);
+  };
+
+  function payWithCrypto() {
+    if (!validateForm()) return true;
+
+    monthly = getMonthly();
+    const total = getTotal();
+    oneTime = total - monthly;
+
+    const addProductTwoInput = document.getElementById('checkout_offer_include_order_bump');
+    if (addProductTwoInput == null) {
+      addProductOne = false;
+      addProductTwo = true;
+    } else {
+      addProductOne = true;
+      addProductTwo = addProductTwoInput.checked;
+    }
+
+    if (oneTimeIsPaid) payForRecurring();
+    else payForOneTime();
+
+    return false;
+  }
+
+  function payForOneTime() {
+    atlos.Pay({
+      merchantId: merchantId,
+      orderAmount: oneTime, 
+      orderId: email, 
+      recurrence: atlos.RECURRENCE_NONE,
+      onSuccess: () => { oneTimeIsPaid = true; },
+      onCompleted: () => {
+        setTimeout(() => { 
+          payForRecurring(); 
+        }, 500);
+      },
+    });
+  }
+
+  function payForRecurring() {
+    atlos.Pay({
+      merchantId: merchantId,
+      orderAmount: monthly, 
+      orderId: email, 
+      recurrence: atlos.RECURRENCE_MONTH,
+      onSuccess: () => { handleSuccess(); },
+      onCompleted: () => { window.location.href = thank_you_url; },
+    });
+  }
+
+  function handleSuccess() {
+    if (addProductOne) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', product_one_hook_url, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.send(JSON.stringify({
+        name: name, 
+        email: email,
+        external_user_id: email,
+      }));
+    }
+
+    if (addProductTwo) {
+      xhr = new XMLHttpRequest();
+      xhr.open('POST', product_two_hook_url, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.send(JSON.stringify({
+        name: name, 
+        email: email,
+        external_user_id: email,
+      }));
+    }
+  }
+
+  function validateForm() {
+    const emailInput = document.getElementById('checkout_offer_member_email');
+    if (emailInput == null) {
+      console.error('Couldn\'t find user email input.');
+      return false;
+    }
+    email = emailInput.value;
+
+    const nameInput = document.getElementById('checkout_offer_member_name');
+    name = nameInput == null ? null : nameInput.value;
+
+    const agreementInput = document.getElementById('checkout_offer_service_agreement');
+    const agreement = agreementInput == null ? true : agreementInput.checked;
+
+    if (!email || !name || !agreement) return false;
+
+    return true;
+  }
+
+  function getMonthly() {
+    const elems = document.querySelectorAll('[data-kjb-element="subtotal"]');
+    if (elems.length == 0) {
+      console.error('Couldn\'t find the needed elements.');
+      return;
+    }
+    const text = elems[0].innerHTML;
+
+    const regexp = '(?:\\$)(.*)(?=\\sUSD)';
+		const matches = text.match(regexp);
+
+    if (matches == null || matches.length < 2) {
+      console.error('Couldn\'t match the expression.');
+      return;
+    }
+
+    const result = parseFloat(matches[1].replace(/,/g, ''));
+
+    return result;
+	}
+
+  function getTotal() {
+    const elems = document.querySelectorAll('[data-kjb-element="due-now-price"]');
+    if (elems.length == 0) {
+      console.error('Couldn\'t find the needed elements.');
+      return;
+    }
+    const text = elems[0].innerHTML;
+
+    const regexp = '(?:\\$)(.*)(?=\\sUSD)';
+		const matches = text.match(regexp);
+
+    if (matches == null || matches.length < 2) {
+      console.error('Couldn\'t match the expression.');
+      return;
+    }
+
+    const result = parseFloat(matches[1].replace(/,/g, ''));
+
+    return result;
+	}
+</script>
